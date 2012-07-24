@@ -10,6 +10,8 @@ from __future__ import print_function
 import re
 import sys
 import time
+import urllib2
+import contextlib
 
 try:
     from html.entities import name2codepoint
@@ -75,3 +77,24 @@ class Fail(object):
         self.count()
         if delay > 0:
             time.sleep(delay)
+
+
+def find_links(line):
+    l = line.replace(u"%", u"%%")
+    regex = "(https?://[^ )]+)"
+    return (
+        re.sub(regex, "%s", l), 
+        [m.group(1) for m in re.finditer(regex, l)])
+    
+def expand_link(link):
+    try:
+        with contextlib.closing(urllib2.urlopen(link)) as site:
+            return site.url
+    except (urllib2.HTTPError, urllib2.URLError):
+        return link
+
+def expand_line(line):
+    l = line.strip()
+    msg_format, links = find_links(l)
+    args = tuple(expand_link(l) for l in links)
+    return msg_format % args
