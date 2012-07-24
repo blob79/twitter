@@ -10,6 +10,8 @@ from __future__ import print_function
 import re
 import sys
 import time
+import urllib2
+import contextlib
 
 try:
     from html.entities import name2codepoint
@@ -75,3 +77,37 @@ class Fail(object):
         self.count()
         if delay > 0:
             time.sleep(delay)
+
+
+def find_links(line):
+    l = line.replace(u"%", u"%%")
+    regex = "(https?://[^ )]+)"
+    return (
+        re.sub(regex, "%s", l), 
+        [m.group(1) for m in re.finditer(regex, l)])
+    
+def follow_redirects(link):
+    class RedirectHandler(urllib2.HTTPRedirectHandler):
+        def __init__(self):
+            self.last_url = None
+        def redirect_request(self, req, fp, code, msg, hdrs, newurl):
+            self.last_url = newurl
+            r = urllib2.HTTPRedirectHandler.redirect_request(
+                self, req, fp, code, msg, hdrs, newurl)
+            r.get_method = lambda : 'HEAD'
+            return r
+    redirect_handler = RedirectHandler()
+    opener = urllib2.build_opener(redirect_handler)
+    req = urllib2.Request(link)
+    req.get_method = lambda : 'HEAD'
+    try:
+        with contextlib.closing(opener.open(req)) as site:
+            return site.url
+    except (urllib2.HTTPError,urllib2.URLError):
+        return redirect_handler.last_url if redirect_handler.last_url else link
+
+def expand_line(line):
+    l = line.strip()
+    msg_format, links = find_links(l)
+    args = tuple(follow_redirects(l) for l in links)
+    return msg_format % args
