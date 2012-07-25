@@ -1,9 +1,8 @@
-from twitter.util import find_links, expand_link, expand_line
+from twitter.util import find_links, follow_redirects, expand_line
 import contextlib
 import BaseHTTPServer
 import SocketServer
 from threading import Thread
-import time
 import functools
 
 
@@ -12,7 +11,8 @@ def test_find_links():
     assert find_links("http://abc") == ("%s", ["http://abc"])
     assert find_links("t http://abc") == ("t %s", ["http://abc"])
     assert find_links("http://abc t") == ("%s t", ["http://abc"])
-    assert find_links("1 http://a 2 http://b 3") == ("1 %s 2 %s 3", ["http://a", "http://b"])
+    assert find_links("1 http://a 2 http://b 3") == ("1 %s 2 %s 3", 
+        ["http://a", "http://b"])
     assert find_links("%") == ("%%", [])
     assert find_links("(http://abc)") == ("(%s)", ["http://abc"])
 
@@ -27,7 +27,7 @@ def start_server(*resp):
     responses = list(reversed(resp))
     
     class MyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
-        def do_GET(self):
+        def do_HEAD(self):
             response = responses.pop()
             assert response.path == self.path
             self.send_response(response.code)
@@ -43,29 +43,46 @@ def start_server(*resp):
     yield functools.partial(url, port)
     httpd.shutdown()
     
-def test_direct_link():
+def test_follow_redirects_direct_link():
     link = "/resource"
     with start_server(Response(link, 200, {})) as url:
-        assert url(link) == expand_link(url(link))
+        assert url(link) == follow_redirects(url(link))
 
-def test_redirected_link():
+def test_follow_redirects_redirected_link():
     redirected = "/redirected"
     link = "/resource"
     with start_server(
         Response(link, 301, {"Location": redirected}), 
         Response(redirected, 200, {})) as url:
-        assert url(redirected) == expand_link(url(link))
+        assert url(redirected) == follow_redirects(url(link))
         
-def test_unavailable():
+def test_follow_redirects_unavailable():
     link = "/resource"
     with start_server(Response(link, 404, {})) as url:
-        assert url(link) == expand_link(url(link))
+        assert url(link) == follow_redirects(url(link))
 
-def test_no_where():
-    link = "http://links.nowh"
-    assert link == expand_link(link)
+def test_follow_redirects_link_to_last_unavailable():
+    unavailable = "/unavailable"
+    link = "/resource"
+    with start_server(
+        Response(link, 301, {"Location": unavailable}), 
+        Response(unavailable, 404, {})) as url:
+        assert url(unavailable) == follow_redirects(url(link))
+
+
+def test_follow_redirects_no_where():
+    link = "http://links.nowhere/"
+    assert link == follow_redirects(link)
     
-def test_unavailable():
+def test_follow_redirects_link_to_nowhere():
+    unavailable = "http://links.nowhere/"
+    link = "/resource"
+    with start_server(
+        Response(link, 301, {"Location": unavailable})) as url:
+        assert unavailable == follow_redirects(url(link))
+
+
+def test_expand_line():
     redirected = "/redirected"
     link = "/resource"
     with start_server(
@@ -75,7 +92,4 @@ def test_unavailable():
         line = fmt % url(link)
         expected = fmt % url(redirected)
         assert expected == expand_line(line)
-
-
-
 
