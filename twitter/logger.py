@@ -31,8 +31,7 @@ from time import sleep
 from .api import Twitter, TwitterError
 from .cmdline import CONSUMER_KEY, CONSUMER_SECRET
 from .auth import NoAuth
-from .util import printNicely
-
+from .util import printNicely, expand_line
 
 def log_debug(msg):
     print(msg, file=sys.stderr)
@@ -41,7 +40,7 @@ def get_tweets(twitter, screen_name, max_id=None):
     kwargs = dict(count=3200, screen_name=screen_name)
     if max_id:
         kwargs['max_id'] = max_id
-
+    
     n_tweets = 0
     tweets = twitter.statuses.user_timeline(**kwargs)
     for tweet in tweets:
@@ -53,7 +52,7 @@ def get_tweets(twitter, screen_name, max_id=None):
         if tweet.get('in_reply_to_status_id'):
             print("In-Reply-To: %s" % tweet['in_reply_to_status_id'])
         print()
-        for line in tweet['text'].splitlines():
+        for line in expand_line(tweet['text']).splitlines():
             printNicely('    ' + line + '\n')
         print()
         print()
