@@ -1,9 +1,12 @@
-from twitter.util import find_links, follow_redirects, expand_line
-import contextlib
 import BaseHTTPServer
-import SocketServer
-from threading import Thread
+import contextlib
 import functools
+import socket
+import SocketServer
+import threading
+
+from twitter.util import find_links, follow_redirects, expand_line, parse_host_list
+
 
 
 def test_find_links():
@@ -22,7 +25,7 @@ Response = namedtuple('Response', 'path code headers')
 @contextlib.contextmanager
 def start_server(*resp):
     def url(port, path): 
-        return 'http://localhost:%s%s' % (port, path)
+        return 'http://%s:%s%s' % (socket.gethostname(), port, path)
     
     responses = list(reversed(resp))
     
@@ -36,7 +39,7 @@ def start_server(*resp):
             self.end_headers()
             
     httpd = SocketServer.TCPServer(("", 0), MyHandler)
-    t = Thread(target=httpd.serve_forever)
+    t = threading.Thread(target=httpd.serve_forever)
     t.setDaemon(True)
     t.start()
     port = httpd.server_address[1]
@@ -81,6 +84,32 @@ def test_follow_redirects_link_to_nowhere():
         Response(link, 301, {"Location": unavailable})) as url:
         assert unavailable == follow_redirects(url(link))
 
+def test_follow_redirects_filtered_by_site():
+    link = "/resource"
+    with start_server() as url:
+        assert url(link) == follow_redirects(url(link), ["other_host"])
+
+
+def test_follow_redirects_filtered_by_site_after_redirect():
+    redirected = "/redirected"
+    link = "/resource"
+    filtered = "http://dont-follow/"
+    with start_server(
+        Response(link, 301, {"Location": redirected}), 
+        Response(redirected, 301, {"Location": filtered})) as url:
+        hosts = [socket.gethostname()]
+        assert filtered == follow_redirects(url(link), hosts)
+
+def test_follow_redirects_filtered_by_site_allowed():
+    redirected = "/redirected"
+    link = "/resource"
+    with start_server(
+        Response(link, 301, {"Location": redirected}), 
+        Response(redirected, 200, {})) as url:
+        hosts = [socket.gethostname()]
+        assert url(redirected) == follow_redirects(url(link), hosts)
+        
+#have to check initially that the url is in the set of allowed sites and in the redirect handler
 
 def test_expand_line():
     redirected = "/redirected"
@@ -91,5 +120,13 @@ def test_expand_line():
         fmt = "before %s after"
         line = fmt % url(link)
         expected = fmt % url(redirected)
-        assert expected == expand_line(line)
+        assert expected == expand_line(line, None)
+
+def test_parse_host_config():
+    assert set() == parse_host_list("")
+    assert set("h") == parse_host_list("h")
+    assert set(["1", "2"]) == parse_host_list("1,2")
+    assert set(["1", "2"]) == parse_host_list(" 1 , 2 ")
+
+
 
