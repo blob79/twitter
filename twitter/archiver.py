@@ -14,7 +14,8 @@ OPTIONS
  -a --api-rate         see current API rate limit status
  -t --timeline <file>  archive own timeline into given file name (requires
                        OAuth, max 800 statuses).
- -f --follow-redirects   follow redirects of urls
+ -f --follow-redirects follow redirects of urls
+ -r --redirect-sites   follow redirects for this comma separated list of hosts
 
 AUTHENTICATION
     Authenticate to Twitter using OAuth to archive tweets of private profiles

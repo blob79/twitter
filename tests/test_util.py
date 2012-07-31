@@ -1,12 +1,11 @@
 import BaseHTTPServer
+from collections import namedtuple
 import contextlib
 import functools
 import socket
 import SocketServer
 import threading
-
 from twitter.util import find_links, follow_redirects, expand_line, parse_host_list
-
 
 
 def test_find_links():
@@ -19,11 +18,13 @@ def test_find_links():
     assert find_links("%") == ("%%", [])
     assert find_links("(http://abc)") == ("(%s)", ["http://abc"])
 
-from collections import namedtuple
+
 Response = namedtuple('Response', 'path code headers')
 
 @contextlib.contextmanager
 def start_server(*resp):
+    """HTTP server replying with the given responses to the expected
+    requests."""
     def url(port, path): 
         return 'http://%s:%s%s' % (socket.gethostname(), port, path)
     
@@ -64,7 +65,7 @@ def test_follow_redirects_unavailable():
     with start_server(Response(link, 404, {})) as url:
         assert url(link) == follow_redirects(url(link))
 
-def test_follow_redirects_link_to_last_unavailable():
+def test_follow_redirects_link_to_last_available():
     unavailable = "/unavailable"
     link = "/resource"
     with start_server(
@@ -91,8 +92,8 @@ def test_follow_redirects_filtered_by_site():
 
 
 def test_follow_redirects_filtered_by_site_after_redirect():
-    redirected = "/redirected"
     link = "/resource"
+    redirected = "/redirected"
     filtered = "http://dont-follow/"
     with start_server(
         Response(link, 301, {"Location": redirected}), 
@@ -108,8 +109,6 @@ def test_follow_redirects_filtered_by_site_allowed():
         Response(redirected, 200, {})) as url:
         hosts = [socket.gethostname()]
         assert url(redirected) == follow_redirects(url(link), hosts)
-        
-#have to check initially that the url is in the set of allowed sites and in the redirect handler
 
 def test_expand_line():
     redirected = "/redirected"
@@ -127,6 +126,4 @@ def test_parse_host_config():
     assert set("h") == parse_host_list("h")
     assert set(["1", "2"]) == parse_host_list("1,2")
     assert set(["1", "2"]) == parse_host_list(" 1 , 2 ")
-
-
 

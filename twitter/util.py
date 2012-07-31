@@ -81,6 +81,8 @@ class Fail(object):
 
 
 def find_links(line):
+    """Find all links in the given line. The function returns a sprintf style
+    format string (with %s placeholders for the links) and a list of urls."""
     l = line.replace(u"%", u"%%")
     regex = "(https?://[^ )]+)"
     return (
@@ -88,6 +90,8 @@ def find_links(line):
         [m.group(1) for m in re.finditer(regex, l)])
     
 def follow_redirects(link, sites= None):
+    """Follow directs for the link as long as the redirects are on the given
+    sites and return the resolved link."""
     def follow(url):
         return sites == None or urlparse.urlparse(url).hostname in sites
                 
@@ -112,16 +116,18 @@ def follow_redirects(link, sites= None):
     try:
         with contextlib.closing(opener.open(req)) as site:
             return site.url
-    except (urllib2.HTTPError,urllib2.URLError):
+    except (urllib2.HTTPError, urllib2.URLError):
         return redirect_handler.last_url if redirect_handler.last_url else link
 
 def expand_line(line, sites):
+    """Expand the links in the line for the given sites."""
     l = line.strip()
     msg_format, links = find_links(l)
     args = tuple(follow_redirects(l, sites) for l in links)
     return msg_format % args
 
 def parse_host_list(list_of_hosts):
+    """Parse the comma separated list of hosts."""
     p = set(
         m.group(1) for m in re.finditer("\s*([^,\s]+)\s*,?\s*", list_of_hosts))
     return p
